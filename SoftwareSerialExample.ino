@@ -16,6 +16,7 @@
 #define CHANGE 'T'
 #define CHANGE_SP 'X'
 #define SECURE 'C'
+#define ROTATION360 'S'
 
 #include <SoftwareSerial.h>
 SoftwareSerial mySerial(10, 11);// RX, TX
@@ -51,12 +52,12 @@ void rotate_right(int vel1, int vel2){
   move(true, false, vel1, vel2);
 }
 
-void turn_right(int velocity){
-  move(true, true, velocity, velocity/2);
-}
-void turn_left(int velocity){
-  move(true, true, velocity/2, velocity);
-}
+// void turn_right(int velocity){
+//   move(true, true, velocity, velocity/2);
+// }
+// void turn_left(int velocity){
+//   move(true, true, velocity/2, velocity);
+// }
 
 void stop(){
   move(true, true, 0, 0);
@@ -101,14 +102,23 @@ int const size_sp = 2;
 int fixed_speed[size_sp] = {205, 205};
 int shift_speed = 10;
 
+int turning_time[size] = {500, 1000, 1500, 2000};
+char command_rotation[size] = {'T', 'C', 'X', 'S'};
+int shift_turning_time = 100;
+bool is_added_time = false; // time
+bool is_reduced_time = false; // time
+
+int idx_R = -1;
+int idx_L = -1;
+int current_rotation = idx_R;
+
 void setup() {
-  for(int i = 0; i<=7; i++)
-  {
+  for(int i = 0; i<=7; i++){
       pinMode(i, OUTPUT);
   }
   
   Serial.begin(9600);
-  while (!Serial) {
+  while (!Serial){
     ; 
   }
   mySerial.begin(9600);
@@ -127,13 +137,74 @@ void loop() {
     case SPEED:
       speed_balancing(command);
       break;
+    case TURN:
+      turning_time_calibration(command);
+      break;
   }
 
   if(mySerial.available()){
     command = mySerial.read();
-    Serial.println(command);
+    if (command != '0'){
+      Serial.println(command);
+    }
     select_state();
   }
+}
+
+void turning_time_calibration(char command){
+  switch(command){
+    case(FORWARD): // прибавляем время
+      if (!is_added_time){
+        for (int i = 0; i < size; ++i) {
+          if (prev_comm == command_rotation[i]) {
+            turning_time[i] += shift_turning_time;
+            printSpeed();
+            is_added_time = true;
+            return;
+          }
+        }
+      }
+      break;
+    case(BACKWARD): // убавляем время
+      if (!is_reduced_time){
+        for (int i = 0; i < size; ++i) {
+          if (prev_comm == command_rotation[i]) {
+            if (turning_time[i] - shift_turning_time >= 100){
+              turning_time[i] -= shift_turning_time;
+              printSpeed();
+              is_reduced_time = true;
+            }
+            return;
+          }
+        }
+      }
+      break;
+    default: // калибровка времени поворота 
+      is_reduced_time = false;
+      is_added_time = false;
+      for (int i = 0; i < size; ++i) {
+        if (command == command_rotation[i]) {
+          move_commands[current_rotation](fixed_speed[0], fixed_speed[1]);
+          delay(turning_time[i]);
+          prev_comm = command;
+          return;
+        }
+      }
+      stop();
+      break;
+  }
+}
+
+void printSpeed(){
+  Serial.print("90: ");
+  Serial.println(turning_time[0]);
+  Serial.print("180: ");
+  Serial.println(turning_time[1]);
+  Serial.print("270: ");
+  Serial.println(turning_time[2]);
+  Serial.print("360: ");
+  Serial.println(turning_time[3]);
+  Serial.println("");
 }
 
 void speed_balancing(char command){
@@ -212,6 +283,12 @@ void direction_calibration(char command){
         if (prev_comm == tmp_command_chars[i]) {
           command_chars[i] = prev_comm;
           printArray(command_chars, size);
+          if (prev_comm == RIGHT){
+            idx_R = i;
+            current_rotation = idx_R;
+          }else if (prev_comm == LEFT){
+            idx_L = i;
+          }
           return;
         }
       }
@@ -244,6 +321,13 @@ void select_state(){
         break;
       case TURN:
         state = DIRECTION;
+        break;
+      case MOVEMENT:
+        if (current_rotation == idx_R){
+          current_rotation = idx_L;
+        }else{
+          current_rotation = idx_R;
+        }
         break;
     }
   }else if (command == MOVE){
@@ -281,6 +365,15 @@ void executeCommand(char command){
       move_commands[i](fixed_speed[0], fixed_speed[1]);
       return;
     }
+  }
+  if (idx_R != -1 && idx_L != -1){
+    for (int i = 0; i < size; ++i) {
+        if (command == command_rotation[i]) {
+          move_commands[current_rotation](fixed_speed[0], fixed_speed[1]);
+          delay(turning_time[i]);
+          return;
+        }
+      }
   }
   stop();
 }
