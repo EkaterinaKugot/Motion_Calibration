@@ -11,7 +11,7 @@
 #define LEFT 'L'
 #define RIGHT 'R'
 #define CHANGE_STATE 'A'
-#define RETURN_STATE 'X'
+// #define RETURN_STATE 'X'
 #define MOVE 'P'
 
 #define CHANGE 'T'
@@ -119,6 +119,7 @@ void loop() {
     case DIRECTION:
       direction_calibration(command);
       break;
+    
   }
 
   if(mySerial.available()){
@@ -176,10 +177,13 @@ void select_state(){
         break;
     }
   }else if (command == MOVE){
-    prev_state = state;
-    state = MOVEMENT;
-  } else if (command == RETURN_STATE){
-    state = prev_state;
+    if (state != MOVEMENT){
+      prev_state = state;
+      state = MOVEMENT;
+    }
+    else if (state == MOVEMENT){
+      state = prev_state;
+    }
   }
   // Serial.println(stateToString(state));
 }
